@@ -10,6 +10,11 @@
  * @section Overview
  * 			Abstracts all the device-specific details and sets up an interface between the WISP and the accelerometer, exposing the
  * 			accelerometer data through a simple public-facing API.
+ *
+ * @section Usage
+ * 			On startup, call Accel_Init to initialize the device. This sets the device in standby mode. To actually read from the
+ *			accelerometer, call Accel_StartMeasuring. Accel_Read (or alternatively Accel_ReadVector) will return the most recent
+ *			accelerometer measurements. When finished, call Accel_StopMeasuring to put the device in low-power standby mode.
  * 
  * @section Details
  * 			The ADXL346 is controlled by reading and writing to a bank of registers (see accel_registers.h for a register map).
@@ -23,6 +28,8 @@
  * 			- Uses ACLK to drive I2C communication.
  * 
  * @section	TODOs
+ *	@todo	Finish implementing I2C communication
+ *	@todo	Investigate how to best handle sleep states
  * 	@todo	Change I2C pins from 1.6/1.7 to 3.0/3.1 for the 5310
  * 	@todo	Integrate with WispGuts
  * 	@todo	Maybe add hooks for custom interrupt handlers?
@@ -37,6 +44,7 @@
 // Accelerometer data
 static int16_t gAccelX = 0, gAccelY = 0, gAccelZ = 0;
 static uint8_t gRXData;
+static bool gStandbyMode = true;
 
 // Private function prototypes
 void __Accel_InitInterrupts(void);
@@ -50,7 +58,8 @@ void __Accel_WriteRegister(uint8_t address, uint8_t data);
 
 /************************************************************************************************************************************/
 /**	@fcn		void Accel_Init(void)
- *  @brief		Initializes the accelerometer and the MSP430 interfaces needed to interact with it
+ *  @brief		Initializes the accelerometer and the MSP430 interfaces needed to interact with it.
+ *	@details	The device starts up in standby mode; call Accel_StartMeasuring() when ready to read from the accelerometer.
  */
 /************************************************************************************************************************************/
 void Accel_Init(void)
@@ -64,8 +73,31 @@ void Accel_Init(void)
 }
 
 /************************************************************************************************************************************/
+/**	@fcn		void Accel_StartMeasuring(void)
+ *  @brief		Tells the accelerometer to wake up and start making measurements.
+ */
+/************************************************************************************************************************************/
+void Accel_StartMeasuring(void)
+{
+	__Accel_WriteRegister(REG_POWER_CTL, 0x08);
+	gStandbyMode = false;
+}
+
+/************************************************************************************************************************************/
+/**	@fcn		void Accel_StartMeasuring(void)
+ *  @brief		Stops accelerometer measurements and puts the device into low-power standby mode.
+ */
+/************************************************************************************************************************************/
+void Accel_StopMeasuring(void)
+{
+	__Accel_WriteRegister(REG_POWER_CTL, 0x00);
+	gStandbyMode = true;
+}
+
+/************************************************************************************************************************************/
 /**	@fcn		void Accel_Read(int16_t *x, int16_t *y, int16_t *z)
- *  @brief		Returns the most recently-read accelerometer data
+ *  @brief		Returns the most recently-read accelerometer data.
+ *	@details	If the device is in standby mode, this does nothing.
  *
  *  @param		[out]	x		The x component
  *
@@ -76,26 +108,30 @@ void Accel_Init(void)
 /************************************************************************************************************************************/
 void Accel_Read(int16_t *x, int16_t *y, int16_t *z)
 {
-	if (x != NULL)
-		*x = gAccelX;
-		
-	if (y != NULL)
-		*y = gAccelY;
-		
-	if (z != NULL)
-		*z = gAccelZ;
+	if (!gStandbyMode)
+	{
+		if (x != NULL)
+			*x = gAccelX;
+			
+		if (y != NULL)
+			*y = gAccelY;
+			
+		if (z != NULL)
+			*z = gAccelZ;
+	}
 }
 
 /************************************************************************************************************************************/
 /**	@fcn		void Accel_ReadVector(int16_t data[])
- *  @brief		Returns the most recently-read accelerometer data into an array
+ *  @brief		Returns the most recently-read accelerometer data into an array.
+ *	@details	If the device is in standby mode, this does nothing.
  *
  *  @param		[out]	data	Expects an array of length 3 to write into (data[0] = x, data[1] = y, data[2] = z)
  */
 /************************************************************************************************************************************/
 void Accel_ReadVector(int16_t data[])
 {
-	if (data != NULL)
+	if (!gStandbyMode && data != NULL)
 	{
 		data[0] = gAccelX;
 		data[1] = gAccelY;
@@ -107,8 +143,8 @@ void Accel_ReadVector(int16_t data[])
 
 /************************************************************************************************************************************/
 /**	@fcn		void __Accel_InitInterrupts(void)
- *  @brief		Sets up port interrupts to trigger on INT1 and INT2
- *  @details	Uses P1.3 and P1.4
+ *  @brief		Sets up port interrupts to trigger on INT1 and INT2.
+ *  @details	Uses P1.3 and P1.4.
  */
 /************************************************************************************************************************************/
 void __Accel_InitInterrupts(void)
@@ -121,8 +157,8 @@ void __Accel_InitInterrupts(void)
 
 /************************************************************************************************************************************/
 /**	@fcn		void __Accel_InitSerial(void)
- *  @brief		Sets up the MSP430's I2C module to communicate with the accelerometer
- *  @details	Uses a data rate of 12.5 Hz
+ *  @brief		Sets up the MSP430's I2C module to communicate with the accelerometer.
+ *  @details	Uses a data rate of 12.5 Hz.
  */
 /************************************************************************************************************************************/
 void __Accel_InitSerial(void)
@@ -155,24 +191,20 @@ void __Accel_InitSerial(void)
 
 /************************************************************************************************************************************/
 /**	@fcn		void __Accel_InitDevice(void)
- *  @brief		Sends a series of device-specific commands via register writes to initialize the accelerometer
+ *  @brief		Sends a series of device-specific commands via register writes to initialize the accelerometer.
  */
 /************************************************************************************************************************************/
 void __Accel_InitDevice(void)
 {
-	// Full resolution, +/- 16g range
-	__Accel_WriteRegister(REG_DATA_FORMAT, 0x0b);
+	__Accel_WriteRegister(REG_DATA_FORMAT, 0x0b);	// Full resolution, +/- 16g range
+	__Accel_WriteRegister(REG_INT_ENABLE, 0x80);	// Enable data ready interrupts
 	
 	// TODO: write the rest of the initialization sequence
-	
-	// Start measurement and enable data ready interrupts
-	__Accel_WriteRegister(REG_POWER_CTL, 0x08);
-	__Accel_WriteRegister(REG_INT_ENABLE, 0x80);
 }
 
 /************************************************************************************************************************************/
 /**	@fcn		uint8_t __Accel_ReadRegister(uint8_t address)
- *  @brief		Reads from the specified register
+ *  @brief		Reads from the specified register.
  *
  *  @param		[in]	address		The address of the register to read from (see accel_registers.h)
  *
@@ -187,7 +219,7 @@ uint8_t __Accel_ReadRegister(uint8_t address)
 
 /************************************************************************************************************************************/
 /**	@fcn		void __Accel_WriteRegister(uint8_t address, uint8_t data)
- *  @brief		Writes to the specified register
+ *  @brief		Writes to the specified register.
  *
  *  @param		[in]	address		The address of the register to write to (see accel_registers.h)
  *
@@ -203,8 +235,8 @@ void __Accel_WriteRegister(uint8_t address, uint8_t data)
 
 /************************************************************************************************************************************/
 /**	@fcn		__interrupt void Port_1(void)
- * 	@brief		Port 1 interrupt service routine
- *  @details	Triggered when the accelerometer fires an interrupt on INT1 or INT2
+ * 	@brief		Port 1 interrupt service routine.
+ *  @details	Triggered when the accelerometer fires an interrupt on INT1 or INT2.
  */
 /************************************************************************************************************************************/
 #pragma vector=PORT1_VECTOR
@@ -229,8 +261,8 @@ __interrupt void Port_1(void)
 
 /************************************************************************************************************************************/
 /**	@fcn		__interrupt void USCIAB0TX_ISR(void)
- *  @brief		USCI_B0 data interrupt service routine
- * 	@details	Triggered when the accelerometer sends data over the I2C line
+ *  @brief		USCI_B0 data interrupt service routine.
+ * 	@details	Triggered when the accelerometer sends data over the I2C line.
  */
 /************************************************************************************************************************************/
 #pragma vector = USCIAB0TX_VECTOR
