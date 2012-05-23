@@ -235,7 +235,7 @@ void __Accel_WriteRegister(uint8_t address, uint8_t data)
 
 /************************************************************************************************************************************/
 /**	@fcn		__interrupt void Port_1(void)
- * 	@brief		Port 1 interrupt service routine.
+ *  @brief		Port 1 interrupt service routine.
  *  @details	Triggered when the accelerometer fires an interrupt on INT1 or INT2.
  */
 /************************************************************************************************************************************/
