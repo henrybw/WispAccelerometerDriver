@@ -1,5 +1,5 @@
 /*
- * accelh
+ * accel_registers.h
  *
  *  Created on: May 22, 2012
  *      Author: htw
