@@ -81,6 +81,9 @@ void Accel_StartMeasuring(void)
 {
 	__Accel_WriteRegister(REG_POWER_CTL, 0x08);
 	gStandbyMode = false;
+
+	// Enable data ready interrupts
+	__Accel_WriteRegister(REG_INT_ENABLE, 0x80);
 }
 
 /************************************************************************************************************************************/
@@ -197,7 +200,6 @@ void __Accel_InitSerial(void)
 void __Accel_InitDevice(void)
 {
 	__Accel_WriteRegister(REG_DATA_FORMAT, 0x0b);	// Full resolution, +/- 16g range
-	__Accel_WriteRegister(REG_INT_ENABLE, 0x80);	// Enable data ready interrupts
 	
 	// TODO: write the rest of the initialization sequence
 }
