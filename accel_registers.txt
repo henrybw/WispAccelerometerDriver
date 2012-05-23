@@ -1,0 +1,33 @@
+0x00    DEVID  R  11100110  Device ID.
+0x1D    THRESH_TAP  R/W 00000000  Tap threshold. 
+0x1E    OFSX  R/W 00000000  X-axis offset. 
+0x1F    OFSY  R/W 00000000  Y-axis offset. 
+0x20    OFSZ  R/W 00000000  Z-axis offset. 
+0x21    DUR  R/W 00000000  Tap duration. 
+0x22    Latent  R/W 00000000  Tap latency. 
+0x23    Window  R/W 00000000  Tap window. 
+0x24    THRESH_ACT  R/W 00000000  Activity threshold. 
+0x25    THRESH_INACT  R/W 00000000  Inactivity threshold. 
+0x26    TIME_INACT  R/W 00000000  Inactivity time. 
+0x27    ACT_INACT_CTL  R/W 00000000  Axis enable control for activity and inactivity detection. 
+0x28    THRESH_FF  R/W 00000000  Free-fall threshold. 
+0x29    TIME_FF  R/W 00000000  Free-fall time. 
+0x2A    TAP_AXES  R/W 00000000  Axis control for single tap/double tap. 
+0x2B    ACT_TAP_STATUS  R  00000000  Source of single tap/double tap. 
+0x2C    BW_RATE  R/W 00001010  Data rate and power mode control. 
+0x2D    POWER_CTL  R/W 00000000  Power-saving features control. 
+0x2E    INT_ENABLE  R/W 00000000  Interrupt enable control. 
+0x2F    INT_MAP  R/W 00000000  Interrupt mapping control. 
+0x30    INT_SOURCE  R  00000010  Source of interrupts. 
+0x31    DATA_FORMAT  R/W 00000000  Data format control. 
+0x32    DATAX0  R  00000000  X-Axis Data 0. 
+0x33    DATAX1  R  00000000  X-Axis Data 1. 
+0x34    DATAY0  R  00000000  Y-Axis Data 0. 
+0x35    DATAY1  R  00000000  Y-Axis Data 1. 
+0x36    DATAZ0  R  00000000  Z-Axis Data 0. 
+0x37    DATAZ1  R  00000000  Z-Axis Data 1. 
+0x38    FIFO_CTL  R/W 00000000  FIFO control. 
+0x39    FIFO_STATUS  R  00000000  FIFO status. 
+0x3A    TAP_SIGN  R  00000000  Sign and source for single tap/double tap. 
+0x3B    ORIENT_CONF  R/W 00100101  Orientation configuration. 
+0x3C    Orient  R  00000000  Orientation status.
