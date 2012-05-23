@@ -21,6 +21,8 @@
  * 			Read/write commands are sent serially using either SPI or I2C (we use I2C, operating at 12.5 Hz). Additionally, the
  * 			ADXL346 also has 8 interrupts available for various events (e.g. data is ready, free fall detected), each of which can be
  * 			mapped to one of two interrupt pins (INT1 and INT2) that the ADXL346 will turn on when an interrupt-enabled event occurs.
+ *
+ *			TODO: explain link/autosleep modes, activity/inactivity interrupts.
  * 
  * @section Dependencies
  * 			- Uses port interrupts on P1.3 and P1.4 to catch interrupts from the accelerometer.
@@ -29,7 +31,6 @@
  * 
  * @section	TODOs
  *	@todo	Finish implementing I2C communication
- *	@todo	Investigate how to best handle sleep states
  * 	@todo	Change I2C pins from 1.6/1.7 to 3.0/3.1 for the 5310
  * 	@todo	Integrate with WispGuts
  * 	@todo	Maybe add hooks for custom interrupt handlers?
@@ -79,11 +80,14 @@ void Accel_Init(void)
 /************************************************************************************************************************************/
 void Accel_StartMeasuring(void)
 {
-	__Accel_WriteRegister(REG_POWER_CTL, 0x08);
+	// Enable link mode, autosleep, and measurements
+	__Accel_WriteRegister(REG_POWER_CTL, BIT5 | BIT4 | BIT3);
 	gStandbyMode = false;
 
-	// Enable data ready interrupts
-	__Accel_WriteRegister(REG_INT_ENABLE, 0x80);
+	// TODO: configure INT_SOURCE and INT_MAP (activity/inactivity, others?)
+
+	// Enable data ready interrupts (TODO: figure out other interrupts we want to enable)
+	__Accel_WriteRegister(REG_INT_ENABLE, BIT7);
 }
 
 /************************************************************************************************************************************/
@@ -93,7 +97,7 @@ void Accel_StartMeasuring(void)
 /************************************************************************************************************************************/
 void Accel_StopMeasuring(void)
 {
-	__Accel_WriteRegister(REG_POWER_CTL, 0x00);
+	__Accel_WriteRegister(REG_POWER_CTL, 0);
 	gStandbyMode = true;
 }
 
@@ -199,9 +203,17 @@ void __Accel_InitSerial(void)
 /************************************************************************************************************************************/
 void __Accel_InitDevice(void)
 {
-	__Accel_WriteRegister(REG_DATA_FORMAT, 0x0b);	// Full resolution, +/- 16g range
-	
-	// TODO: write the rest of the initialization sequence
+	// Full resolution, +/- 16g range
+	__Accel_WriteRegister(REG_DATA_FORMAT, BIT3 | BIT1 | BIT0);
+
+	// Low-power mode (bit 4) with data rate of 12.5 MHz (rate code: 0111)
+	__Accel_WriteRegister(REG_BW_RATE, BIT4 | BIT2 | BIT1 | BIT0);
+
+	// Configure autosleep (TODO: calibrate these values)
+	__Accel_WriteRegister(REG_THRESH_INACT, 10);	// Readings under this magnitude are considered inactivity
+	__Accel_WriteRegister(REG_TIME_INACT, 5);		// Seconds of inactivity before going into autosleep mode
+
+	// TODO: configure interrupts
 }
 
 /************************************************************************************************************************************/
@@ -244,6 +256,8 @@ void __Accel_WriteRegister(uint8_t address, uint8_t data)
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void)
 {
+	// TODO: handle link mode stuff to enable autosleep
+
 	if (P1IFG & BIT3)
 	{
 		// Interrupt 1 was triggered
