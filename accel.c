@@ -103,7 +103,7 @@ void Accel_StopMeasuring(void)
  *
  *  @param		[out]	y		The y component
  * 
- * 	@param		[out]	z		The z component
+ *  @param		[out]	z		The z component
  */
 /************************************************************************************************************************************/
 void Accel_Read(int16_t *x, int16_t *y, int16_t *z)
