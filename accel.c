@@ -59,7 +59,7 @@ void __Accel_WriteRegister(uint8_t address, uint8_t data);
 /************************************************************************************************************************************/
 /**	@fcn		void Accel_Init(void)
  *  @brief		Initializes the accelerometer and the MSP430 interfaces needed to interact with it.
- *	@details	The device starts up in standby mode; call Accel_StartMeasuring() when ready to read from the accelerometer.
+ *  @details	The device starts up in standby mode; call Accel_StartMeasuring() when ready to read from the accelerometer.
  */
 /************************************************************************************************************************************/
 void Accel_Init(void)
@@ -97,7 +97,7 @@ void Accel_StopMeasuring(void)
 /************************************************************************************************************************************/
 /**	@fcn		void Accel_Read(int16_t *x, int16_t *y, int16_t *z)
  *  @brief		Returns the most recently-read accelerometer data.
- *	@details	If the device is in standby mode, this does nothing.
+ *  @details	If the device is in standby mode, this does nothing.
  *
  *  @param		[out]	x		The x component
  *
@@ -124,7 +124,7 @@ void Accel_Read(int16_t *x, int16_t *y, int16_t *z)
 /************************************************************************************************************************************/
 /**	@fcn		void Accel_ReadVector(int16_t data[])
  *  @brief		Returns the most recently-read accelerometer data into an array.
- *	@details	If the device is in standby mode, this does nothing.
+ *  @details	If the device is in standby mode, this does nothing.
  *
  *  @param		[out]	data	Expects an array of length 3 to write into (data[0] = x, data[1] = y, data[2] = z)
  */
@@ -262,7 +262,7 @@ __interrupt void Port_1(void)
 /************************************************************************************************************************************/
 /**	@fcn		__interrupt void USCIAB0TX_ISR(void)
  *  @brief		USCI_B0 data interrupt service routine.
- * 	@details	Triggered when the accelerometer sends data over the I2C line.
+ *  @details	Triggered when the accelerometer sends data over the I2C line.
  */
 /************************************************************************************************************************************/
 #pragma vector = USCIAB0TX_VECTOR
