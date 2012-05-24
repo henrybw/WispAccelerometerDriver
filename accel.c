@@ -12,17 +12,17 @@
  * 			accelerometer data through a simple public-facing API.
  *
  * @section Usage
- * 			On startup, call Accel_Init to initialize the device. This sets the device in standby mode. To actually read from the
- *			accelerometer, call Accel_StartMeasuring. Accel_Read (or alternatively Accel_ReadVector) will return the most recent
- *			accelerometer measurements. When finished, call Accel_StopMeasuring to put the device in low-power standby mode.
+ * 			On startup, call Accel_Init to initialize the device. Accel_Read (or alternatively Accel_ReadVector) will read data from
+ *			the accelerometer, and then put the device into low-power standby mode.
  * 
  * @section Details
  * 			The ADXL346 is controlled by reading and writing to a bank of registers (see accel_registers.h for a register map).
  * 			Read/write commands are sent serially using either SPI or I2C (we use I2C, operating at 12.5 Hz). Additionally, the
  * 			ADXL346 also has 8 interrupts available for various events (e.g. data is ready, free fall detected), each of which can be
  * 			mapped to one of two interrupt pins (INT1 and INT2) that the ADXL346 will turn on when an interrupt-enabled event occurs.
- *
- *			TODO: explain link/autosleep modes, activity/inactivity interrupts.
+ *			For our purposes, we only care about the data ready interrupt, since the WISP isn't powered for long enough to feasibly
+ *			take multiple measurements. (INT1 and INT2 are still connected and ready to use if, in the future, we want more than just
+ *			the data ready interrupt.)
  * 
  * @section Dependencies
  * 			- Uses port interrupts on P1.3 and P1.4 to catch interrupts from the accelerometer.
@@ -30,11 +30,13 @@
  * 			- Uses ACLK to drive I2C communication.
  * 
  * @section	TODOs
+ *	@todo	Figure out how to do multiple-byte reads of the data registers
+ *	@todo	Figure out error handling
  *	@todo	Finish implementing I2C communication
  * 	@todo	Change I2C pins from 1.6/1.7 to 3.0/3.1 for the 5310
  * 	@todo	Integrate with WispGuts
- * 	@todo	Maybe add hooks for custom interrupt handlers?
  * 	@todo	Look into FIFO functionality
+ * 	@todo	Maybe add hooks for custom interrupt handlers?
  */
 /************************************************************************************************************************************/
 #include "accel.h"
@@ -42,15 +44,14 @@
 
 // PRIVATE GLOBAL DECLARATIONS -----------------------------------------------------------------------------------------------------//
 
-// Accelerometer data
-static int16_t gAccelX = 0, gAccelY = 0, gAccelZ = 0;
 static uint8_t gRXData;
-static bool gStandbyMode = true;
 
 // Private function prototypes
 void __Accel_InitInterrupts(void);
 void __Accel_InitSerial(void);
 void __Accel_InitDevice(void);
+void __Accel_EnterStandby(void);
+void __Accel_Read(int16_t *x, int16_t *y, int16_t *z);
 uint8_t __Accel_ReadRegister(uint8_t address);
 void __Accel_WriteRegister(uint8_t address, uint8_t data);
 // TODO: write some sort of common I2C communication routine
@@ -74,37 +75,9 @@ void Accel_Init(void)
 }
 
 /************************************************************************************************************************************/
-/**	@fcn		void Accel_StartMeasuring(void)
- *  @brief		Tells the accelerometer to wake up and start making measurements.
- */
-/************************************************************************************************************************************/
-void Accel_StartMeasuring(void)
-{
-	// Enable link mode, autosleep, and measurements
-	__Accel_WriteRegister(REG_POWER_CTL, BIT5 | BIT4 | BIT3);
-	gStandbyMode = false;
-
-	// TODO: configure INT_SOURCE and INT_MAP (activity/inactivity, others?)
-
-	// Enable data ready interrupts (TODO: figure out other interrupts we want to enable)
-	__Accel_WriteRegister(REG_INT_ENABLE, BIT7);
-}
-
-/************************************************************************************************************************************/
-/**	@fcn		void Accel_StartMeasuring(void)
- *  @brief		Stops accelerometer measurements and puts the device into low-power standby mode.
- */
-/************************************************************************************************************************************/
-void Accel_StopMeasuring(void)
-{
-	__Accel_WriteRegister(REG_POWER_CTL, 0);
-	gStandbyMode = true;
-}
-
-/************************************************************************************************************************************/
 /**	@fcn		void Accel_Read(int16_t *x, int16_t *y, int16_t *z)
- *  @brief		Returns the most recently-read accelerometer data.
- *  @details	If the device is in standby mode, this does nothing.
+ *  @brief		Reads the x, y, and z-axis data and puts the accelerometer into standby mode.
+ *  @defails	Pass in NULL for any parameters you do not care about reading.
  *
  *  @param		[out]	x		The x component
  *
@@ -115,35 +88,20 @@ void Accel_StopMeasuring(void)
 /************************************************************************************************************************************/
 void Accel_Read(int16_t *x, int16_t *y, int16_t *z)
 {
-	if (!gStandbyMode)
-	{
-		if (x != NULL)
-			*x = gAccelX;
-			
-		if (y != NULL)
-			*y = gAccelY;
-			
-		if (z != NULL)
-			*z = gAccelZ;
-	}
+	__Accel_Read(x, y, z);
 }
 
 /************************************************************************************************************************************/
 /**	@fcn		void Accel_ReadVector(int16_t data[])
- *  @brief		Returns the most recently-read accelerometer data into an array.
- *  @details	If the device is in standby mode, this does nothing.
+ *  @brief		Reads the x, y, and z-axis data into an array and puts the accelerometer into standby mode.
  *
  *  @param		[out]	data	Expects an array of length 3 to write into (data[0] = x, data[1] = y, data[2] = z)
  */
 /************************************************************************************************************************************/
 void Accel_ReadVector(int16_t data[])
 {
-	if (!gStandbyMode && data != NULL)
-	{
-		data[0] = gAccelX;
-		data[1] = gAccelY;
-		data[2] = gAccelZ;
-	}
+	if (data != NULL)
+		__Accel_Read(data, data + 1, data + 2);
 }
 
 // PRIVATE FUNCTIONS ---------------------------------------------------------------------------------------------------------------//
@@ -203,17 +161,59 @@ void __Accel_InitSerial(void)
 /************************************************************************************************************************************/
 void __Accel_InitDevice(void)
 {
-	// Full resolution, +/- 16g range
-	__Accel_WriteRegister(REG_DATA_FORMAT, BIT3 | BIT1 | BIT0);
+	__Accel_WriteRegister(REG_DATA_FORMAT, BIT3 | BIT1 | BIT0);		// Full resolution, +/- 16g range
+	__Accel_WriteRegister(REG_BW_RATE, BIT4 | BIT2 | BIT1 | BIT0);	// Low-power mode (bit 4) with 12.5 MHz data rate
+	__Accel_WriteRegister(REG_POWER_CTL, BIT3);						// Enter measurement mode
+	__Accel_WriteRegister(REG_INT_ENABLE, BIT7);					// Enable the data ready interrupt
 
-	// Low-power mode (bit 4) with data rate of 12.5 MHz (rate code: 0111)
-	__Accel_WriteRegister(REG_BW_RATE, BIT4 | BIT2 | BIT1 | BIT0);
+	// Sanity check the device by ensuring the DEVID register contains 0xe6
+	if (__Accel_ReadRegister(REG_DEVID) != 0xe6)
+	{
+		// ERROR! TODO: how do we handle errors?
+	}
+}
 
-	// Configure autosleep (TODO: calibrate these values)
-	__Accel_WriteRegister(REG_THRESH_INACT, 10);	// Readings under this magnitude are considered inactivity
-	__Accel_WriteRegister(REG_TIME_INACT, 5);		// Seconds of inactivity before going into autosleep mode
+/************************************************************************************************************************************/
+/**	@fcn		void __Accel_EnterStandby(void)
+ *  @brief		Turns off measurements and puts the accelerometer into standby mode.
+ *  @details	Current consumption is reduced to 0.2 uA.
+ */
+/************************************************************************************************************************************/
+void __Accel_EnterStandby(void)
+{
+	__Accel_WriteRegister(REG_POWER_CTL, 0);
+}
 
-	// TODO: configure interrupts
+/************************************************************************************************************************************/
+/**	@fcn		void __Accel_Read(int16_t *x, int16_t *y, int16_t *z)
+ *  @brief		Private helper for reading accelerometer data. Puts the accelerometer into standby mode when finished.
+ *  @defails	Pass in NULL for any parameters you do not care about reading.
+ *
+ *  @param		[out]	x		The x component
+ *
+ *  @param		[out]	y		The y component
+ * 
+ *  @param		[out]	z		The z component
+ */
+/************************************************************************************************************************************/
+void __Accel_Read(int16_t *x, int16_t *y, int16_t *z)
+{
+	if (x != NULL)
+	{
+		// TODO: read DATAX0 and DATAX1 in a multiple-byte read
+	}
+
+	if (y != NULL)
+	{
+		// TODO: read DATAY0 and DATAY1 in a multiple-byte read
+	}
+
+	if (z != NULL)
+	{
+		// TODO: read DATAZ0 and DATAZ1 in a multiple-byte read
+	}
+
+	__Accel_EnterStandby();
 }
 
 /************************************************************************************************************************************/
@@ -256,8 +256,6 @@ void __Accel_WriteRegister(uint8_t address, uint8_t data)
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void)
 {
-	// TODO: handle link mode stuff to enable autosleep
-
 	if (P1IFG & BIT3)
 	{
 		// Interrupt 1 was triggered

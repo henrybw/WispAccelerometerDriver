@@ -14,8 +14,6 @@
 #include <msp430g2553.h>  // TODO: change this to wispGuts.h when integrating into the WISP
 
 void Accel_Init(void);
-void Accel_StartMeasuring(void);
-void Accel_StopMeasuring(void);
 void Accel_Read(int16_t *x, int16_t *y, int16_t *z);
 void Accel_ReadVector(int16_t data[]);
 
