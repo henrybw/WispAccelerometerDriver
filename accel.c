@@ -61,7 +61,6 @@ void __Accel_WriteRegister(uint8_t address, uint8_t data);
 /************************************************************************************************************************************/
 /**	@fcn		void Accel_Init(void)
  *  @brief		Initializes the accelerometer and the MSP430 interfaces needed to interact with it.
- *  @details	The device starts up in standby mode; call Accel_StartMeasuring() when ready to read from the accelerometer.
  */
 /************************************************************************************************************************************/
 void Accel_Init(void)
