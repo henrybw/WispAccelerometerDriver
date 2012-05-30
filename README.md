@@ -15,7 +15,7 @@ Important stuff:
 
 Less important stuff:
 
-* `accel_registers.h`: All the ADXL346 registers declared as a constants. (These are generated from accel_registers.txt, which was in turn copied/pasted from the ADXL346 data sheet.)
+* `accel_registers.h`: All the ADXL346 registers declared as constants. (These are generated from accel_registers.txt, which was in turn copied/pasted from the ADXL346 data sheet.)
 * `main.c`: Simple test program for exercising the accelerometer API.
 
 Notes
