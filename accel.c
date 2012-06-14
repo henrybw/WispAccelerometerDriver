@@ -318,8 +318,8 @@ void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t s
 
 	// Copy the source buffer into the transmission buffer beforehand
 	uint8_t i;
-	for (i = 1; i <= size; i++)
-		gDataBuffer[i] = srcBuffer[i - 1];  // First slot is reserved for starting register address
+	for (i = 0; i < size; i++)
+		gDataBuffer[i + 1] = srcBuffer[i];  // First slot is reserved for starting register address
 
 	// Enable TX interrupt
 	IE2 |= UCB0TXIE;
