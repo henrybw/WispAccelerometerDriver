@@ -1,6 +1,9 @@
 //
 // Simple driver program to test the accelerometer API.
 //
+// BIT0 - red LED
+// BIT6 - green LED
+//
 #include <msp430g2553.h>
 #include "accel.h"
 
