@@ -1,3 +1,5 @@
+#if 0
+
 #ifndef USCI_LIB
 #define USCI_LIB
 
@@ -15,5 +17,7 @@ void TI_USCI_I2C_transmit(unsigned char byteCount, unsigned char *field);
 unsigned char TI_USCI_I2C_slave_present(unsigned char slave_address);
 unsigned char TI_USCI_I2C_notready();
 
+
+#endif
 
 #endif

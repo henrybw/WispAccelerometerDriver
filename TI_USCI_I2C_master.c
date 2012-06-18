@@ -1,3 +1,4 @@
+#if 0
 //******************************************************************************
 //   MSP430 USCI I2C Transmitter and Receiver
 //
@@ -209,3 +210,5 @@ __interrupt void USCIAB0TX_ISR(void)
 }
 
 
+
+#endif

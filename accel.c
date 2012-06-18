@@ -41,7 +41,7 @@
 /************************************************************************************************************************************/
 #include "accel.h"
 #include "accel_registers.h"
-#include "TI_USCI_I2C_master.h"
+//#include "TI_USCI_I2C_master.h"
 
 // PRIVATE GLOBAL DECLARATIONS -----------------------------------------------------------------------------------------------------//
 
@@ -50,20 +50,21 @@
 #define STATE_READING			1
 #define STATE_SENDING_RESTART	2
 
-//static uint8_t gState;
+static uint8_t gState;
 static uint8_t gDataBuffer[MAX_TRANSMISSION_SIZE];
 static uint8_t gBufferSize;
-//static uint8_t gCurrentByte;
+static uint8_t gCurrentByte;
 
 // Private helper functions
 void __Accel_InitInterrupts(void);
 void __Accel_InitDevice(void);
 void __Accel_EnterStandby(void);
-void __Accel_SetupSerial(void);
 
 void __Accel_ReadAccelData(int16_t *x, int16_t *y, int16_t *z);
 uint8_t __Accel_ReadRegister(uint8_t address);
 void __Accel_WriteRegister(uint8_t address, uint8_t data);
+
+void __Accel_SetupSerial(void);
 void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t size);
 void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t size);
 
@@ -169,33 +170,6 @@ void __Accel_EnterStandby(void)
 }
 
 /************************************************************************************************************************************/
-/**	@fcn		void __Accel_SetupSerial(void)
- *  @brief		Sets up the MSP430's I2C module to communicate with the accelerometer.
- *  @details	Uses a transmission rate of 100 kHz.
- */
-/************************************************************************************************************************************/
-void __Accel_SetupSerial(void)
-{	
-	// Disable all I2C interrupts
-	IE2 &= ~(UCB0RXIE | UCB0TXIE);
-
-	// Initial I2C configuration
-	UCB0CTL1 |= UCSWRST;                         // Enable software reset
-	UCB0CTL0 = UCMST + UCMODE_3 + UCSYNC;        // I2C Master, synchronous mode
-	UCB0CTL1 = UCSSEL_2 + UCSWRST;               // Use SMCLK, keep software reset
-	
-	// fSCL = SMCLK/12 = ~100kHz
-	UCB0BR0 = 12;
-	UCB0BR1 = 0;
-	
-	// Specify I2C slave address (SDO/ALT ADDRESS is tied to ground)
-	UCB0I2CSA = 0x53;
-	
-	// Finish I2C configuration
-	UCB0CTL1 &= ~UCSWRST;                        // Clear software reset and resume operation
-}
-
-/************************************************************************************************************************************/
 /**	@fcn		void __Accel_ReadAccelData(int16_t *x, int16_t *y, int16_t *z)
  *  @brief		Private helper for reading accelerometer data. Puts the accelerometer into standby mode when finished.
  *  @defails	Pass in NULL for any parameters you do not care about reading.
@@ -258,6 +232,33 @@ void __Accel_WriteRegister(uint8_t address, uint8_t data)
 }
 
 /************************************************************************************************************************************/
+/**	@fcn		void __Accel_SetupSerial(void)
+ *  @brief		Sets up the MSP430's I2C module to communicate with the accelerometer.
+ *  @details	Uses a transmission rate of 100 kHz.
+ */
+/************************************************************************************************************************************/
+void __Accel_SetupSerial(void)
+{	
+	// Disable all I2C interrupts
+	IE2 &= ~(UCB0RXIE | UCB0TXIE);
+
+	// Initial I2C configuration
+	UCB0CTL1 |= UCSWRST;                         // Enable software reset
+	UCB0CTL0 = UCMST + UCMODE_3 + UCSYNC;        // I2C Master, synchronous mode
+	UCB0CTL1 = UCSSEL_2 + UCSWRST;               // Use SMCLK, keep software reset
+	
+	// fSCL = SMCLK/12 = ~100kHz
+	UCB0BR0 = 12;
+	UCB0BR1 = 0;
+	
+	// Specify I2C slave address (SDO/ALT ADDRESS is tied to ground)
+	UCB0I2CSA = 0x53;
+	
+	// Finish I2C configuration
+	UCB0CTL1 &= ~UCSWRST;                        // Clear software reset and resume operation
+}
+
+/************************************************************************************************************************************/
 /**	@fcn		void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t size)
  *  @brief		TODO: write documentation
  *
@@ -270,7 +271,7 @@ void __Accel_WriteRegister(uint8_t address, uint8_t data)
 /************************************************************************************************************************************/
 void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t size)
 {
-	TI_USCI_I2C_transmitinit(0x53, 12);
+	/*TI_USCI_I2C_transmitinit(0x53, 12);
 	while ( TI_USCI_I2C_notready() );
 	
 	gDataBuffer[0] = startAddress;
@@ -284,9 +285,9 @@ void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t s
 	// The bytes we read are sitting in gDataBuffer; now copy them into destBuffer
 	uint8_t i;
 	for (i = 0; i < size; i++)
-		destBuffer[i] = gDataBuffer[i];
+		destBuffer[i] = gDataBuffer[i];*/
 	
-	/*__Accel_SetupSerial();
+	__Accel_SetupSerial();
 
 	gState = STATE_READING;
 	gDataBuffer[0] = startAddress;
@@ -311,7 +312,7 @@ void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t s
 	// The bytes we read are sitting in gDataBuffer; now copy them into destBuffer
 	uint8_t i;
 	for (i = 0; i < size; i++)
-		destBuffer[i] = gDataBuffer[i + 1];*/
+		destBuffer[i] = gDataBuffer[i + 1];
 }
 
 /************************************************************************************************************************************/
@@ -327,7 +328,7 @@ void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t s
 /************************************************************************************************************************************/
 void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t size)
 {
-	TI_USCI_I2C_transmitinit(0x53, 12);
+	/*TI_USCI_I2C_transmitinit(0x53, 12);
 	while ( TI_USCI_I2C_notready() );
 	
 	gDataBuffer[0] = startAddress;
@@ -339,9 +340,9 @@ void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t s
 		gDataBuffer[i] = srcBuffer[i - 1];  // First slot is reserved for starting register address
 	
 	TI_USCI_I2C_transmit(gBufferSize, gDataBuffer);
-	LPM0;
+	LPM0;*/
 	
-	/*__Accel_SetupSerial();
+	__Accel_SetupSerial();
 
 	gState = STATE_WRITING;
 	gDataBuffer[0] = startAddress;
@@ -358,8 +359,8 @@ void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t s
 	UCB0I2CIE = UCSTPIE + UCSTTIE + UCNACKIE;
 
 	// Transmit the start sentinel and then enter LPM0 with interrupts
-	UCB0TXBUF = startAddress;
 	UCB0CTL1 |= UCTR + UCTXSTT;
+	UCB0TXBUF = startAddress;
 	while (UCB0CTL1 & UCTXSTT);
 	
 	__no_operation();
@@ -370,7 +371,7 @@ void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t s
 	//
 
 	// Ensure the stop sentinel was sent
-	while (UCB0CTL1 & UCTXSTP);*/
+	while (UCB0CTL1 & UCTXSTP);
 }
 
 // INTERRUPT VECTORS ---------------------------------------------------------------------------------------------------------------//
@@ -407,7 +408,7 @@ __interrupt void Port_1(void)
  *  @details	TODO: document the ugly state machine
  */
 /************************************************************************************************************************************/
-/*#pragma vector = USCIAB0TX_VECTOR
+#pragma vector = USCIAB0TX_VECTOR
 __interrupt void USCIAB0TX_ISR(void)
 {
 	if (gCurrentByte == 0)
@@ -451,4 +452,4 @@ __interrupt void USCIAB0TX_ISR(void)
 
 		gCurrentByte++;
 	}
-}*/
+}
