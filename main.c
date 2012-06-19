@@ -12,6 +12,11 @@ void main(void)
 	// Stop watchdog timer
 	WDTCTL = WDTPW + WDTHOLD;
 	
+	// Turn on SMCLK monitoring
+	P1SEL |= BIT4;
+	P1SEL2 &= ~BIT4;
+	P1DIR |= BIT4;
+	
 	Accel_Init();
 	
 	// Enter LPM4 w/interrupt

@@ -49,10 +49,10 @@
 #define STATE_READING			1
 #define STATE_SENDING_RESTART	2
 
-static uint8_t gState;
-static uint8_t gDataBuffer[MAX_TRANSMISSION_SIZE];
-static uint8_t gBufferSize;
-static uint8_t gCurrentByte;
+static volatile uint8_t gState;
+static volatile uint8_t gDataBuffer[MAX_TRANSMISSION_SIZE];
+static volatile uint8_t gBufferSize;
+static volatile uint8_t gCurrentByte;
 
 // Private helper functions
 void __Accel_InitInterrupts(void);
@@ -76,6 +76,10 @@ void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t s
 /************************************************************************************************************************************/
 void Accel_Init(void)
 {
+	// Calibrate DCO and SMCLK to 1 MHz
+	BCSCTL1 = CALBC1_1MHZ;
+	DCOCTL = CALDCO_1MHZ;
+	
 	// Enable I2C pins 
 	P1SEL  |= BIT6 + BIT7;
 	P1SEL2 |= BIT6 + BIT7;
@@ -241,20 +245,24 @@ void __Accel_SetupSerial(void)
 	// Disable all I2C interrupts
 	IE2 &= ~(UCB0RXIE | UCB0TXIE);
 
-	// Initial I2C configuration
-	UCB0CTL1 |= UCSWRST;                         // Enable software reset
+	// Ensure stop condition got sent
+	while (UCB0CTL1 & UCTXSTP);
+
+	// Put the I2C module in software reset mode
+	UCB0CTL1 |= UCSWRST;
+	
 	UCB0CTL0 = UCMST + UCMODE_3 + UCSYNC;        // I2C Master, synchronous mode
 	UCB0CTL1 = UCSSEL_2 + UCSWRST;               // Use SMCLK, keep software reset
 	
-	// fSCL = SMCLK/12 = ~100kHz
-	UCB0BR0 = 12;
+	// fSCL = SMCLK/10 = 1 MHz / 10 = ~100kHz
+	UCB0BR0 = 10;
 	UCB0BR1 = 0;
 	
 	// Specify I2C slave address (SDO/ALT ADDRESS is tied to ground)
 	UCB0I2CSA = 0x53;
 	
-	// Finish I2C configuration
-	UCB0CTL1 &= ~UCSWRST;                        // Clear software reset and resume operation
+	// Clear software reset and resume operation
+	UCB0CTL1 &= ~UCSWRST;
 }
 
 /************************************************************************************************************************************/
@@ -292,6 +300,8 @@ void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t s
 	gDataBuffer[0] = startAddress;
 	gBufferSize = size + 1;  // Account for register address
 	gCurrentByte = 0;
+	
+	UCB0TXBUF = startAddress;
 
 	// Enable TX interrupt
 	IE2 |= UCB0TXIE;
@@ -300,6 +310,7 @@ void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t s
 	// Transmit the start sentinel and then enter LPM0 with interrupts
 	UCB0CTL1 |= UCTR + UCTXSTT;
 	__bis_SR_register(CPUOFF + GIE);
+	__no_operation();
 
 	//
 	// *** Receiving is done in the TX ISR, and when that's done, we exit low-power mode and return to here ***
@@ -353,17 +364,18 @@ void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t s
 	for (i = 0; i < size; i++)
 		gDataBuffer[i + 1] = srcBuffer[i];  // First slot is reserved for starting register address
 
+	UCB0TXBUF = startAddress;
+	
 	// Enable TX interrupt
 	IE2 |= UCB0TXIE;
 	UCB0I2CIE = UCSTPIE + UCSTTIE + UCNACKIE;
 
 	// Transmit the start sentinel and then enter LPM0 with interrupts
 	UCB0CTL1 |= UCTR + UCTXSTT;
-	UCB0TXBUF = startAddress;
 	while (UCB0CTL1 & UCTXSTT);
 	
-	__no_operation();
 	__bis_SR_register(CPUOFF + GIE);
+	__no_operation();
 
 	//
 	// *** Transmission is done in the TX ISR, and when that's done, we exit low-power mode and return to here ***
