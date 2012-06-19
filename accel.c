@@ -382,14 +382,14 @@ void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t s
 	//while (UCB0CTL1 & UCTXSTT);
 	
 	__bis_SR_register(LPM0_bits + GIE);
-	__no_operation();
+	//__no_operation();
 
 	//
 	// *** Transmission is done in the TX ISR, and when that's done, we exit low-power mode and return to here ***
 	//
 
 	// Ensure the stop sentinel was sent
-	while (UCB0CTL1 & UCTXSTP);
+	//while (UCB0CTL1 & UCTXSTP);
 }
 
 // INTERRUPT VECTORS ---------------------------------------------------------------------------------------------------------------//
