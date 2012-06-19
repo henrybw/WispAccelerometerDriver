@@ -89,8 +89,8 @@ void Accel_Init(void)
 	//P2SEL2 |= BIT0 + BIT1;
 	
 	// Temporary LED debugging (TODO: remove in production)
-	//P1DIR |= BIT0;
-	//P1OUT &= ~BIT0;
+	P1DIR |= BIT0;
+	P1OUT &= ~BIT0;
 	
 	//__Accel_InitInterrupts();
 	__Accel_InitDevice();
@@ -150,14 +150,21 @@ void __Accel_InitInterrupts(void)
 void __Accel_InitDevice(void)
 {
 	__Accel_WriteRegister(REG_DATA_FORMAT, BIT3 | BIT1 | BIT0);		// Full resolution, +/- 16g range
-	__Accel_WriteRegister(REG_BW_RATE, BIT4 | BIT2 | BIT1 | BIT0);	// Low-power mode (bit 4) with 12.5 MHz data rate
+	/*__Accel_WriteRegister(REG_BW_RATE, BIT4 | BIT2 | BIT1 | BIT0);	// Low-power mode (bit 4) with 12.5 MHz data rate
 	__Accel_WriteRegister(REG_POWER_CTL, BIT3);						// Enter measurement mode
-	__Accel_WriteRegister(REG_INT_ENABLE, BIT7);					// Enable the data ready interrupt
+	__Accel_WriteRegister(REG_INT_ENABLE, BIT7);					// Enable the data ready interrupt*/
 
 	// Sanity check the device by ensuring the DEVID register contains 0xe6
-	if (__Accel_ReadRegister(REG_DEVID) != 0xe6)
+	uint8_t devID = __Accel_ReadRegister(REG_DEVID);
+	
+	if (devID != 0xe6)
 	{
 		// ERROR! TODO: how do we handle errors?
+		__no_operation();
+	}
+	else
+	{
+		P1OUT |= BIT0;
 	}
 }
 
@@ -317,7 +324,7 @@ void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t s
 	//
 
 	// Ensure the stop sentinel was sent
-	while (UCB0CTL1 & UCTXSTP);
+	//while (UCB0CTL1 & UCTXSTP);
 
 	// The bytes we read are sitting in gDataBuffer; now copy them into destBuffer
 	uint8_t i;
@@ -372,9 +379,9 @@ void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t s
 
 	// Transmit the start sentinel and then enter LPM0 with interrupts
 	UCB0CTL1 |= UCTR + UCTXSTT;
-	while (UCB0CTL1 & UCTXSTT);
+	//while (UCB0CTL1 & UCTXSTT);
 	
-	__bis_SR_register(CPUOFF + GIE);
+	__bis_SR_register(LPM0_bits + GIE);
 	__no_operation();
 
 	//
@@ -451,8 +458,12 @@ __interrupt void USCIAB0TX_ISR(void)
 	{
 		// We're done, so send the start sentinel and exit low-power mode
 		UCB0CTL1 |= UCTXSTP;
-		IFG2 &= ~UCB0TXIFG;  // Clear USCI_B0 TX interrupt flag
-		__bic_SR_register_on_exit(CPUOFF);
+		
+		IFG2 &= ~UCB0TXIFG;  // Clear TX interrupt flag
+		IE2 &= ~UCB0TXIE;    // Clear TX interrupt enable
+		UCB0I2CIE = 0;       // Clear other I2C interrupt enable bits
+		
+		__bic_SR_register_on_exit(LPM0_bits + GIE);
 	}
 	else
 	{
