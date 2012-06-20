@@ -295,7 +295,7 @@ void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t s
 
 	// Transmit the start sentinel and then enter LPM0 with interrupts
 	UCB0CTL1 |= UCTR + UCTXSTT;
-	__bis_SR_register(CPUOFF + GIE);
+	__bis_SR_register(LPM0_bits + GIE);
 
 	//
 	// *** Receiving is done in the TX ISR, and when that's done, we exit low-power mode and return to here ***
