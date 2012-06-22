@@ -29,11 +29,18 @@
  * 			- Uses UCB0 (P3.0 and P3.1, along with associated control registers) for I2C communication.
  * 			- Uses SMCLK to drive I2C communication.
  * 
+ * @section Future Design Considerations
+ * 			Currently, based on the normal WISP usage scenario, this interface is designed to be activated once, take a measurement,
+ * 			and then put the accelerometer back into standby mode. The accelerometer, however, also has a sleep mode that can generate
+ * 			an interrupt when activity is detected (otherwise, the custom interrupts are useless for our purposes). Right now we ignore
+ * 			this, but maybe this can be redesigned in the future to configure activity interrupts and then enter sleep mode instead of
+ * 			entering standby after taking a measurement.
+ * 
  * @section	TODOs
  * 	@todo	Change I2C pins from 1.6/1.7 to 3.0/3.1 for the 5310
- * 	@todo	Add hooks for custom interrupt handlers (triggered by the accelerometer)
  * 	@todo	Integrate with WispGuts
  * 	@todo	Remove everything between <strip></strip> tags.
+ * 	@todo	Look into calibrating the accelerometer
  * 	@todo	Maybe look into FIFO functionality?
  */
 /************************************************************************************************************************************/
@@ -56,7 +63,6 @@ static volatile uint8_t gCurrentByte;
 void __Accel_InitSerial(void);
 void __Accel_InitInterrupts(void);
 void __Accel_InitDevice(void);
-void __Accel_EnterStandby(void);
 
 void __Accel_ReadAccelData(int16_t *x, int16_t *y, int16_t *z);
 uint8_t __Accel_ReadRegister(uint8_t address);
@@ -87,12 +93,6 @@ void Accel_Init(void)
 	// TODO: use these pins for the 5310 instead
 	//P3SEL  |= BIT0 + BIT1;
 	//P3SEL2 |= BIT0 + BIT1;
-	
-//<strip>
-	// Temporary LED debugging
-	P1DIR |= BIT0;
-	P1OUT &= ~BIT0;
-//<strip>
 	
 	__Accel_InitSerial();
 	__Accel_InitInterrupts();
@@ -183,27 +183,12 @@ void __Accel_InitInterrupts(void)
 /************************************************************************************************************************************/
 void __Accel_InitDevice(void)
 {
+	// Wait 1.1 milliseconds before transmitting any commands
+	__delay_cycles(1100);
+	
 	__Accel_WriteRegister(REG_DATA_FORMAT, BIT3 | BIT1 | BIT0);		// Full resolution, +/- 16g range
-	__Accel_WriteRegister(REG_BW_RATE, BIT4 | BIT2 | BIT1 | BIT0);	// Low-power mode (bit 4) with 12.5 Hz data rate (bits 3-0)
-	__Accel_WriteRegister(REG_POWER_CTL, BIT3);						// Enter measurement mode
+	__Accel_WriteRegister(REG_BW_RATE, BIT4 | /*BIT2 | BIT1 | BIT0*/ 0x0c);	// Low-power mode (bit 4) with 12.5 Hz data rate (bits 3-0)
 	__Accel_WriteRegister(REG_INT_ENABLE, BIT7);					// Enable the data ready interrupt
-
-//<strip>
-	// Sanity check the device by ensuring the DEVID register contains 0xe6
-	if (__Accel_ReadRegister(REG_DEVID) == 0xe6)
-		P1OUT |= BIT0;
-//</strip>
-}
-
-/************************************************************************************************************************************/
-/**	@fcn		void __Accel_EnterStandby(void)
- *  @brief		Turns off measurements and puts the accelerometer into standby mode.
- *  @details	Current consumption is reduced to 0.2 uA.
- */
-/************************************************************************************************************************************/
-void __Accel_EnterStandby(void)
-{
-	__Accel_WriteRegister(REG_POWER_CTL, 0);
 }
 
 /************************************************************************************************************************************/
@@ -220,6 +205,9 @@ void __Accel_EnterStandby(void)
 /************************************************************************************************************************************/
 void __Accel_ReadAccelData(int16_t *x, int16_t *y, int16_t *z)
 {
+	// Enter measurement mode
+	__Accel_WriteRegister(REG_POWER_CTL, BIT3);
+	
 	if (x != NULL && y != NULL && z != NULL)
 	{
 		uint8_t buffer[6];
@@ -233,8 +221,9 @@ void __Accel_ReadAccelData(int16_t *x, int16_t *y, int16_t *z)
 		(*y) = buffer[2] | (buffer[3] << 8);
 		(*z) = buffer[4] | (buffer[5] << 8);
 	}
-
-	__Accel_EnterStandby();
+	
+	// Enter standby mode
+	__Accel_WriteRegister(REG_POWER_CTL, 0);
 }
 
 /************************************************************************************************************************************/
@@ -288,8 +277,12 @@ void __Accel_ReadSequential(uint8_t startAddress, uint8_t *destBuffer, uint8_t s
 	gDataBuffer[0] = startAddress;
 	gBufferSize = size + 1;  // Account for register address
 	gCurrentByte = 0;
-
-	// Enable TX interrupt
+	
+	// Disable interrupts while we specify which interrupts to enable. This avoids a possible condition where the TX interrupt
+	// is fired (because the transmit buffer is empty) before we are actually ready to transmit anything.
+	__bic_SR_register(GIE);
+	
+	// Enable TX and other necessary interrupts
 	IE2 |= UCB0TXIE;
 	UCB0I2CIE = UCSTPIE + UCSTTIE + UCNACKIE;
 
@@ -330,13 +323,17 @@ void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t s
 	gDataBuffer[0] = startAddress;
 	gBufferSize = size + 1;  // Account for register address
 	gCurrentByte = 0;
+	
+	// Disable interrupts while we specify which interrupts to enable. This avoids a possible condition where the TX interrupt
+	// is fired (because the transmit buffer is empty) before we are actually ready to transmit anything.
+	__bic_SR_register(GIE);
 
 	// Copy the source buffer into the transmission buffer before starting the transmission process
 	uint8_t i;
 	for (i = 0; i < size; i++)
 		gDataBuffer[i + 1] = srcBuffer[i];  // Skip over starting register address
 	
-	// Enable TX interrupt
+	// Enable TX and other necessary interrupts
 	IE2 |= UCB0TXIE;
 	UCB0I2CIE = UCSTPIE + UCSTTIE + UCNACKIE;
 
@@ -363,18 +360,19 @@ void __Accel_WriteSequential(uint8_t startAddress, uint8_t *srcBuffer, uint8_t s
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void)
 {
+	// TODO: we should figure out if interrupts are necessary
 	if (P1IFG & BIT3)
 	{
 		// Interrupt 1 was triggered
-		// TODO: actually do something with this
 		P1IFG &= ~BIT3;
+		__bic_SR_register_on_exit(LPM0_bits);
 	}
 	
 	if (P1IFG & BIT4)
 	{
 		// Interrupt 2 was triggered
-		// TODO: actually do something with this
 		P1IFG &= ~BIT4;
+		__bic_SR_register_on_exit(LPM0_bits);
 	}
 }
 
@@ -388,7 +386,7 @@ __interrupt void Port_1(void)
  *  			are, in rough order of execution:
  * 
  *  			- Send starting register address
- *  				This is the start state, signified by the gCurrentByte is 0. The first byte in the data buffer always contains
+ *  				This is the start state, signified by gCurrentByte being 0. The first byte in the data buffer always contains
  *  				the starting register address of the current read/write operation, and this is always written first.
  * 
  *  			- Switch to I2C read mode
@@ -438,9 +436,11 @@ __interrupt void USCIAB0TX_ISR(void)
 	else if (gCurrentByte == gBufferSize)
 	{
 		// We've transmitted all the bytes in the buffer, so now we're done
-		UCB0CTL1 |= UCTXSTP;                         // Send start sentinel
-		IFG2 &= ~UCB0TXIFG;                          // Clear TX interrupt flag
-		__bic_SR_register_on_exit(LPM0_bits + GIE);  // Exit low-power mode
+		UCB0CTL1 |= UCTXSTP;            // Send start sentinel
+		IFG2 &= ~UCB0TXIFG;             // Clear TX interrupt flag
+		IE2 &= ~(UCB0TXIE | UCB0RXIE);  // Disable TX/RX interrupts
+		
+		__bic_SR_register_on_exit(LPM0_bits);  // Exit low-power mode
 	}
 	else
 	{
