@@ -208,19 +208,21 @@ void __Accel_ReadAccelData(int16_t *x, int16_t *y, int16_t *z)
 	// Enter measurement mode
 	__Accel_WriteRegister(REG_POWER_CTL, BIT3);
 	
-	if (x != NULL && y != NULL && z != NULL)
-	{
-		uint8_t buffer[6];
-		
-		// X, Y, and Z are each split into two registers (DATAX0, DATAX1, etc.) containing the least and most significant bytes,
-		// respectively. We read all six registers in one multiple byte read to ensure atomicity (in case the accelerometer reading
-		// would have changed in-between register reads).
-		__Accel_ReadSequential(REG_DATAX0, buffer, 6);
+	uint8_t buffer[6];
+	
+	// X, Y, and Z are each split into two registers (DATAX0, DATAX1, etc.) containing the least and most significant bytes,
+	// respectively. We read all six registers in one multiple byte read to ensure atomicity (in case the accelerometer reading
+	// would have changed in-between register reads).
+	__Accel_ReadSequential(REG_DATAX0, buffer, 6);
 
+	if (x != NULL)
 		(*x) = buffer[0] | (buffer[1] << 8);
+	
+	if (y != NULL)
 		(*y) = buffer[2] | (buffer[3] << 8);
+	
+	if (z != NULL)
 		(*z) = buffer[4] | (buffer[5] << 8);
-	}
 	
 	// Enter standby mode
 	__Accel_WriteRegister(REG_POWER_CTL, 0);
